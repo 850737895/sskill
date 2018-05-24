@@ -1,0 +1,19 @@
+一:二次MD5加密的重要性
+   第一次MD5,用户在提交表单的时候，由于http在网络中是明文传输的,所以客户端通过
+   js进行对password进行加密  加密规则md5(password+salt) 生成第一次md5的值。
+   比如原始密码是:123456   salt为:1a2b3c4d  假设random_salt 为4a3b2c1d
+   第一次加密规则salt[0]+salt[2]+src+salt[salt.length-2]+salt[salt.length-1]
+   第二次次加密规则random_salt[0]+random_salt[2]+firstmd5+random_salt[random_salt.length-2]+random_salt[random_salt.length-1]
+
+   第一次md5加密的字符串为:121234564d   加密结果:a36e5584706629dbe3f841d8f06956f5(网络传送(表单提交))
+   即使别人用md5反编译出来破解的还不是原生的密码123456  而是121234564d 还是不能进行登录
+   缺点:若别人能读懂Js 拿到js源代码还是可以破解出密码的  解决方式（浏览器加入active控件）
+
+   第二次md5字符串43+a36e5584706629dbe3f841d8f06956f5+1d  加密结果：5479e78e35fcf85523198295047e71f8
+   若别人拿到数据库中的密码5479e78e35fcf85523198295047e71f8 通过反编译为43a36e5584706629dbe3f841d8f06956f51d 还不是真正的密码
+
+   只有同时知道salt  random_salt 和加密规则 以及最终加密值 才能知道真正密码比如
+   数据库密码:5479e78e35fcf85523198295047e71f8  反编译过来为43a36e5584706629dbe3f841d8f06956f51d
+   然后知道random_salt 又知道加密规则  可以获取到第一次md5的真正值 a36e5584706629dbe3f841d8f06956f5
+   然后通过反编译第一次md5的值得到第一次加密的原始值121234564d
+   然后知道salt 以及加密规则反推121234564d  获取真正的密码

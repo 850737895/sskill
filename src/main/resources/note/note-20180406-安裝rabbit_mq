@@ -1,0 +1,150 @@
+安裝rabbitMQ
+   第一步:安裝依賴环境  erlang
+   yum install ncurses-devel
+   ./configure --prefix=/usr/local/erlang20 --without-javac
+   enable-threads --enable-smp-support --enable-kernel-poll --without-javac
+   make && make install
+
+   详细步骤:(安装erlang)
+     ①:把otp_src_20.1.tar.gz(erlang的源码包)   rabbitmq-server-generic-unix-3.7.4.tar.xz 上传到/urc/src的目录下
+     ②:进入到/usr/src 安装erlang的依赖条件   yum install ncurses-devel
+     ③:解压 otp_src_20.1.tar.gz  tar -xf otp_src_20.1.tar.gz
+     ④:进入到 opt_src_20.1.tar.gz 解压目录 opt_src_20.1
+     ⑤:./configure --prefix=/usr/local/erlang20 --without-javac
+     ⑥:进行编译   make -j 4  通过4个cpu进行编译
+     ⑦：make install
+     ⑧：检查erlang 是否安装成功 进入到安装目录 /usr/local/erlang20  cd到bin目录
+         执行./erl   如进入到EShell说明安装成功
+
+
+   安装rabbitmq的详细步骤
+     ①:进入到/usr/src目录下
+     ②:解压rabbtimq   xz -d  rabbitmq-server-generic-unix-3.7.4.tar.xz
+     ③:解压第②步出来的 rabbitmq-server-generic-unix-3.7.4.tar    tar -xf rabbitmq-server-generic-unix-3.7.4.tar
+     ④:第③步解压出来rabbitmq-server-3.7.4
+     ⑤：安装依赖
+         Ⅰ：yum install python -y
+         Ⅱ：yum install xmlto -y
+         Ⅲ：yum install python-simplejson -y
+     ⑥：把    rabbitmq-server-3.7.4  mv到  /urc/local/rabbitmq
+     ⑦:进入到 /urc/local/rabbitmq/bin
+     ⑧：启动rabbitmq  ./rabbitmq-server
+         若启动rabbitmq  出现erl: command not found
+         需要在环境变量文件末尾加入
+                 ERL_HOME=/usr/local/erlang20
+                 PATH=$ERL_HOME/bin:$PATH
+                 export ERL_HOME PATH
+         并且重新加载配置文件 source /etc/profile
+     ⑨：查看端口监听情况 netstat -nap |grep 5672
+     ⑩：停止rabbitmq  ./rabbitmqctl stop
+
+
+如何远程使用guest远程连接服务器
+    需要在 /usr/local/rabbtimq/etc/rabbitmq创建rabbitmq.config加入如下内容 然后重启服务
+    [{rabbit, [{loopback_users, []}]}].
+
+
+rabbitmq消息处理机制(交换机模式)  生产者发送的消息直接发送到交换机上
+    交换机模式：
+       1:DirectExchange(直接交换机)
+         生产者发送消息(带router_key信息) 直接发送到交换机上,然后交换机通过router_key绑定了不同的队列
+         交换机会根据router_key把消息转发到对应的队列上
+         eg:DirectExchange绑定了二个消息队列  q1 q2
+                @Bean //绑定 router_key 为 DIRECT_QUEUE
+                public Binding directExchangeBinding(){
+                    return BindingBuilder.bind(directQueue()).to(directExchange()).with(MDA.DIRECT_QUEUE);
+                }
+
+                /**
+                 * 直接交换机绑定 队列 DIRECT_QUEUE2 router_key:DIRECT_QUEUE2
+                 * @return
+                 */
+                @Bean
+                public Binding directExchangeBinding2(){
+                    return BindingBuilder.bind(directQueue2()).to(directExchange()).with(MDA.DIRECT_QUEUE2);
+                }
+
+                发送:
+                    @Override
+                    public void sendMsgToDirectQueue(Object obj) {
+                        String beanStr = BeanUtil.bean2Str(obj);
+                        logger.info("开始发送消息到{},消息内容为{}", MDA.DIRECT_QUEUE,beanStr);
+                        //router_key 为 DIRECT_QUEUE  那么消息会转发到 DIRECT_QUEUE 队列上
+                        amqpTemplate.convertAndSend(MDA.DIRECT_EXCHANGE,MDA.DIRECT_QUEUE,beanStr);
+                        //router_key 为 DIRECT_QUEUE2  那么消息会转发到 DIRECT_QUEUE2 的队列上
+                        amqpTemplate.convertAndSend(MDA.DIRECT_EXCHANGE,MDA.DIRECT_QUEUE2,beanStr);
+                    }
+
+         2:FanoutExchange模式(广播模式)
+             生产者发送的消息到交换机上,然后交换机会把消息推送到跟交换机所有绑定的队列上(此时不解析router_key)
+
+             代码:
+                    @Bean  //交换机绑定 fanoutQueue
+                    public Binding fanoutExchangeBingdingFanoutQueue(){
+                        return BindingBuilder.bind(fanoutQueue()).to(fanoutExchange());
+                    }
+                    @Bean //交换机绑定 fanoutQueue2
+                    public Binding fanoutExchangeBingdingFanoutQueue2(){
+                        return BindingBuilder.bind(fanoutQueue2()).to(fanoutExchange());
+                    }
+             发送:(fanoutQueue,fanoutQueue2)都会收到消息
+                    @Override
+                    public void sendMsgToFanoutQueue(Object obj) {
+                        String beanStr = BeanUtil.bean2Str(obj);
+                        logger.info("开始发送消息到扇形交换机{},消息内容为{}", MDA.FANOUT_EXCHANGE,beanStr);
+                        amqpTemplate.convertAndSend(MDA.FANOUT_EXCHANGE,"",beanStr);
+                    }
+
+          3:TopicExchange模式(主题模式)
+            该模式下,router_key  可以使用通配符的
+            交换机在绑定队列的时候,router_key可以使用通配符
+
+            绑定：
+                    //此时队列 topicQueue 只能接受 router_key为 TOPIC_QUEUE的消息
+                    @Bean
+                    public Binding topicExchangeBingdingTopicQueue(){
+                        return BindingBuilder.bind(topicQueue()).to(topicExchange()).with("TOPIC.QUEUE");
+                    }
+
+                    //队列 topicQueue2 可以接受router_key 为TOPIC 开头任意的router_key
+                    @Bean
+                    public Binding topicExchangeBingdingTopicQueue2(){
+                        return BindingBuilder.bind(topicQueue2()).to(topicExchange()).with("TOPIC.#");
+                    }
+            发送:
+                        @Override
+                        public void sendMsgToTopicQueue(Object obj) {
+                            String beanStr = BeanUtil.bean2Str(obj);
+                            logger.info("开始发送消息到主题交换机{},消息内容为{}", MDA.TOPIC_EXCHANGE,beanStr);
+                            // topicQueue  topicQueue2都能接受到消息
+                            amqpTemplate.convertAndSend(MDA.TOPIC_EXCHANGE,MDA.TOPIC_QUEUE,beanStr+1);
+                            //只能topicQueue2 接受到消息
+                            amqpTemplate.convertAndSend(MDA.TOPIC_EXCHANGE,"TOPIC.QUEUE5",beanStr+2);
+                        }
+
+            头部交换机模式(HeadersExchange)
+                  交换机在绑定队列的时候会绑定消息发送条件,当且仅当消息发者在发送消息的时候，只要满足绑定的时候的条件才能
+                  把消息发送到交换机上
+
+               绑定:
+                      @Bean
+                       public Binding headersExchangeBingdingHeadersQueue(){
+                           /**
+                            * 消息中必须含有 header1 value1   header2 value2 消息才能发送到交换机上
+                            */
+                           Map<String, Object> map = new HashMap<String, Object>();
+                           map.put("header1", "value1");
+                           map.put("header2", "value2");
+                           return BindingBuilder.bind(headersQueue()).to(headersExchange()).whereAll(map).match();
+                       }
+               发送:
+                           @Override
+                           public void sendMsgToHeaderQueue(Object obj) {
+                               String beanStr = BeanUtil.bean2Str(obj);
+                               logger.info("开始发送消息到头部交换机{},消息内容为{}", MDA.HEADERS_EXCHANGE,beanStr);
+                               MessageProperties properties = new MessageProperties();
+                               properties.setHeader("header1","value1");
+                               properties.setHeader("header2","value2");
+                               Message message = new Message(beanStr.getBytes(),properties);
+                               amqpTemplate.convertAndSend(MDA.HEADERS_EXCHANGE, "", message);
+                           }

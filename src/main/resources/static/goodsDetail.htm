@@ -1,0 +1,216 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+    <title>商品详情</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <!-- jquery -->
+    <script type="text/javascript" src="/js/jquery.min.js"></script>
+    <!-- bootstrap -->
+    <link rel="stylesheet" type="text/css" href="/bootstrap/css/bootstrap.min.css" />
+    <script type="text/javascript" src="/bootstrap/js/bootstrap.min.js"></script>
+    <!-- jquery-validator -->
+    <script type="text/javascript" src="/jquery-validation/jquery.validate.min.js"></script>
+    <script type="text/javascript" src="/jquery-validation/localization/messages_zh.min.js"></script>
+    <!-- layer -->
+    <script type="text/javascript" src="/layer/layer.js"></script>
+    <!-- md5.js -->
+    <script type="text/javascript" src="/js/md5.min.js"></script>
+    <!-- common.js -->
+    <script type="text/javascript" src="/js/common.js"></script>
+</head>
+<body>
+
+<div class="panel panel-default">
+  <div class="panel-heading">秒杀商品详情</div>
+  <div class="panel-body">
+  	<span id="userTip"> 您还没有登录，请登陆后再操作<br/></span>
+  	<span>没有收货地址的提示。。。</span>
+  </div>
+  <table class="table" id="goodslist">
+  	<tr>  
+        <td>商品名称</td>  
+        <td colspan="3" id="goodsName"></td>
+     </tr>  
+     <tr>  
+        <td>商品图片</td>  
+        <td colspan="3"><img id="goodsImg" width="200" height="200" /></td>
+     </tr>
+     <tr>  
+        <td>秒杀开始时间</td>
+         <td id="startTime"></td>
+        <td >
+            <input type="hidden" id="remainSeconds" />
+            <span id="miaoshaTip"></span>
+        </td>
+        <td>
+<!--        	<form id="miaoshaForm" method="post" action="/sskill/doSkill">
+        		<button class="btn btn-primary btn-block" type="submit" id="buyButton">立即秒杀</button>
+        		<input type="hidden" name="sskillGoodsId" th:value="${goods.id}" />
+        	</form>-->
+            <button class="btn btn-primary btn-block" type="button" id="buyButton"onclick="getRealSkillAddr()">立即秒杀</button>
+            <input type="hidden" name="goodsId"  id="goodsId" />
+        </td>
+     </tr>
+     <tr>  
+        <td>商品原价</td>  
+        <td colspan="3" id="goodsPrice"></td>
+     </tr>
+      <tr>  
+        <td>秒杀价</td>  
+        <td colspan="3" id="sskillPrice" ></td>
+     </tr>
+     <tr>  
+        <td>库存数量</td>  
+        <td colspan="3" id="sskillStockCount"></td>
+     </tr>
+  </table>
+</div>
+</body>
+<script>
+$(function(){
+    getGoodsDetail();
+});
+
+function getGoodsDetail() {
+    var goodsId = g_getQueryString("goodsId");
+    $.ajax({
+        url:"/goods/toDetail2/"+goodsId,
+        type:"GET",
+        success:function(data)  {
+            if(data.code == 0) {
+                render(data.data);
+            }else{
+                layer.msg(data.msg);
+            }
+        },
+        error:function(data){
+            layer.msg("客户端请求有误");
+        }
+
+    });
+}
+
+/**
+ * 获取真正的秒杀地址
+ */
+function getRealSkillAddr(){
+    var goodsId = $("#goodsId").val();
+    $.ajax({
+        url:"/sskill/getRealSkillAddr",
+        data:{
+            sskillGoodsId:goodsId
+        },
+        type:"GET",
+        success:function(data){
+            if(data.code ==0) {
+                doSkill(data.data);
+            }else{
+                layer.msg(data.msg);
+            }
+        },
+        error:function () {
+            layer.msg("客户端请求有误");
+        }
+    });
+}
+
+function doSkill(randomStr) {
+    var goodsId = $("#goodsId").val();
+    $.ajax({
+        url:"/sskill/doSkill3/"+randomStr,
+        data:{
+            sskillGoodsId:goodsId
+        },
+        type:"POST",
+        success:function(data){
+            if(data.code==3001) {//秒杀排队中
+                //window.location.href="/orderDetail.htm?orderId="+data.data;
+                querySkillResult(goodsId);
+            }else {
+                layer.msg(data.msg);
+            }
+        },
+        error:function (data) {
+            layer.msg("客户端请求有误");
+        }
+    });
+    
+}
+
+function querySkillResult(skillGoodsId) {
+    g_showLoading();
+    $.ajax({
+        url:"/sskill/querySkillResult",
+        type:"GET",
+        data:{
+            sskillGoodsId:skillGoodsId
+        },
+        success:function (data) {
+            if(data.code ==0) {
+                if(data.data == '3001') {//排队中 轮询 查询
+                    setTimeout(function () {
+                        querySkillResult(skillGoodsId);
+                    },100);
+
+                }else if(data.data=='2002') {
+                    layer.msg("对不起，由于库存不足...秒杀失败");
+                }else{//秒杀成功.....
+                    window.location.href="/orderDetail.htm?orderId="+data.data;
+                }
+            }else{
+                layer.msg(data.msg);
+            }
+        },
+        error:function () {
+            layer.msg("客户端请求有误");
+        }
+
+    });
+}
+
+function render(goodsDetailVo) {
+    var sskillUser = goodsDetailVo.sSkillUser;
+    var goodsVo = goodsDetailVo.goodsVo;
+    var sskillStatus = goodsDetailVo.goodsDetailVo;
+    var remainSeconds = goodsDetailVo.remainSeconds;
+    //开始渲染试图
+    if(sskillUser){
+        $("#userTip").hide();
+    }
+    $("#goodsName").text(goodsVo.goodsName);
+    $("#goodsImg").attr("src",goodsVo.goodsImg);
+    $("#startTime").text(new Date(goodsVo.sskillStartTime).format("yyyy-MM-dd hh:mm:ss"));
+    $("#remainSeconds").val(remainSeconds);
+    $("#goodsId").val(goodsVo.id);
+    $("#goodsPrice").text(goodsVo.goodsPrice);
+    $("#sskillPrice").text(goodsVo.sskillPrice);
+    $("#sskillStockCount").text(goodsVo.sskillStockCount);
+    countDown();
+
+}
+
+function countDown(){
+    var remainSeconds = $("#remainSeconds").val();
+    var timeout;
+    if(remainSeconds > 0){//秒杀还没开始，倒计时
+        $("#buyButton").attr("disabled", true);
+        $("#miaoshaTip").html("秒杀倒计时："+remainSeconds+"秒");
+        timeout = setTimeout(function(){
+            $("#countDown").text(remainSeconds - 1);
+            $("#remainSeconds").val(remainSeconds - 1);
+            countDown();
+        },1000);
+    }else if(remainSeconds == 0){//秒杀进行中
+        $("#buyButton").attr("disabled", false);
+        if(timeout){
+            clearTimeout(timeout);
+        }
+        $("#miaoshaTip").html("秒杀进行中");
+    }else{//秒杀已经结束
+        $("#buyButton").attr("disabled", true);
+        $("#miaoshaTip").html("秒杀已经结束");
+    }
+}
+
+</script>
+</html>

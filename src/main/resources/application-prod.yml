@@ -1,0 +1,43 @@
+spring:
+  datasource:
+    username: root
+    password: 123456
+    url: jdbc:mysql://47.104.128.12:3306/sskill?useUnicode=true&characterEncoding=utf-8
+    driver-class-name: com.mysql.jdbc.Driver
+    type: com.alibaba.druid.pool.DruidDataSource
+  #配置redis
+  redis:
+    host: 127.0.0.1
+    port: 6379
+    password: 123456
+    timeout: 3
+    pool:
+      max-active: 1000
+      max-wait: 500
+      min-idle: 500
+      max-idle: 1000
+  rabbitmq:
+     host: 127.0.0.1
+     port: 5672
+     username: guest
+     password: guest
+     virtual-host: /
+     listener:
+       simple:
+         max-concurrency: 10
+         concurrency: 10
+         prefetch: 1
+         auto-startup: true
+         default-requeue-rejected: true
+     template:
+       retry:
+         enabled: true
+         initial-interval: 1000
+         max-attempts: 3
+         max-interval: 10000
+         multiplier: 1.0
+mybatis:
+  configuration:
+    map-underscore-to-camel-case: true
+server:
+  port: 8080
